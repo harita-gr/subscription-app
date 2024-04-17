@@ -27,20 +27,53 @@ const data = [
 
 const Home = () => {
   const [userId, setUserId] = useState("");
-  const [username, setUsername] = useState("");
+  const [username, setUserName] = useState("");
+  const [planType, setPlanType] = useState("");
+
+  console.log("planType", planType);
 
   useEffect(() => {
-    // To check if user is logged in
     firebase.auth().onAuthStateChanged((user) => {
       if (user) {
         setUserId(user.uid);
-        setUsername(user.displayName);
+        setUserName(user.displayName);
+        const userRef = firebase.database().ref("users/" + user.uid);
+        userRef.on("value", (snapshot) => {
+          const user = snapshot.val();
+          if (user) {
+            setPlanType(user.subscription.planType || "");
+          }
+        });
       } else {
         setUserId("");
-        setUsername("");
+        setUserName("");
       }
     });
   }, [userId]);
+
+  const checkout = (plan) => {
+    fetch("http://localhost:5000/api/v1/create-subscription-checkout-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      mode: "cors",
+      body: JSON.stringify({
+        plan: plan,
+        customerId: userId,
+      }),
+    })
+      .then((res) => {
+        if (res.ok) return res.json();
+        console.log(res);
+
+        return res.json().then((json) => Promise.reject(json));
+      })
+      .then(({ session }) => {
+        window.location = session.url; // redirect to stripe payment URL
+      })
+      .catch((e) => console.error("Error:", e));
+  };
 
   return (
     <div className="flex flex-col items-center w-full min-h-screen mx-auto overflow-x-hidden diagonal-background ">
@@ -67,11 +100,14 @@ const Home = () => {
           )}
         </div>
       </div>
-      <div className="grid lg:grid-cols-3 sm:grid-cols-2 grid-cols-1 gap-5 z-50 place-items-center w-9/12 mx-auto my-20">
+      <div className="z-50 grid w-9/12 grid-cols-1 gap-5 mx-auto my-20 lg:grid-cols-3 sm:grid-cols-2 place-items-center">
         {data.map((item, idx) => (
           <div
             key={idx}
-            className="bg-white px-6 py-8 rounded-xl text-[#4f7cff] w-full mx-auto grid place-items-center"
+            className={`bg-white px-6 py-8 rounded-xl text-[#4f7cff] w-full mx-auto grid place-items-center ${
+              planType === item.title.toLowerCase() &&
+              "border-[16px] border-green-600"
+            }`}
           >
             <img
               src={item.src}
@@ -80,20 +116,29 @@ const Home = () => {
               height={200}
               className="h-40"
             />
-            <div className="text-4xl text-slate-700 text-center py-4 font-bold">
+            <div className="py-4 text-4xl font-bold text-center text-slate-700">
               {item.title}
             </div>
-            <p className="lg:text-sm text-xs text-center px-6 text-slate-500">
+            <p className="px-6 text-xs text-center lg:text-sm text-slate-500">
               Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor
               ipsum dolor ipsum dolor ipsum dolor ipsum dolor
             </p>
-            <div className="text-4xl text-center font-bold py-4">
+            <div className="py-4 text-4xl font-bold text-center">
               ₹{item.price}
             </div>
-            <div className="mx-auto flex justify-center items-center my-3">
-              <button className="bg-[#3d5fc4] text-white rounded-md text-base uppercase w-24 py-2 font-bold">
-                Start
-              </button>
+            <div className="flex items-center justify-center mx-auto my-3">
+              {planType === item.title.toLowerCase() ? (
+                <button className="p-2 text-base font-bold text-white uppercase bg-green-600 rounded-md w-max">
+                  Subscribed
+                </button>
+              ) : (
+                <button
+                  onClick={() => checkout(Number(item.price))}
+                  className="bg-[#3d5fc4] text-white rounded-md text-base uppercase w-24 py-2 font-bold"
+                >
+                  Start
+                </button>
+              )}
             </div>
           </div>
         ))}
